@@ -7,6 +7,13 @@ import CreateServerForm from './CreateServerForm';
 import Link from 'next/link';
 import { Channel } from 'stream-chat';
 
+// Define the type of data stored in your Stream channels
+interface ChannelData {
+  server?: string;
+  image?: string;
+  [key: string]: any; // in case there are extra properties
+}
+
 const ServerList = () => {
   const { client } = useChatContext();
   const { server: activeServer, changeServer } = useDiscordContext();
@@ -17,12 +24,14 @@ const ServerList = () => {
       type: 'messaging',
       members: { $in: [client.userID as string] },
     });
+
     const serverSet: Set<DiscordServer> = new Set(
       channels
         .map((channel: Channel) => {
+          const data = channel.data?.data as ChannelData; // 👈 type assertion
           return {
-            name: (channel.data?.data?.server as string) ?? 'Unknown',
-            image: channel.data?.data?.image,
+            name: data?.server ?? 'Unknown',
+            image: data?.image,
           };
         })
         .filter((server: DiscordServer) => server.name !== 'Unknown')
@@ -32,8 +41,10 @@ const ServerList = () => {
             self.findIndex((serverObject) => serverObject.name == server.name)
         )
     );
+
     const serverArray = Array.from(serverSet.values());
     setServerList(serverArray);
+
     if (serverArray.length > 0) {
       changeServer(serverArray[0], client);
     }
@@ -92,7 +103,7 @@ const ServerList = () => {
     </div>
   );
 
-  function checkIfUrl(path: string): Boolean {
+  function checkIfUrl(path: string): boolean {
     try {
       const _ = new URL(path);
       return true;
