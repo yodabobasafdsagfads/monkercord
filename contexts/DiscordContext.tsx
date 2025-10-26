@@ -7,6 +7,14 @@ import { Channel, ChannelFilters, StreamChat } from 'stream-chat';
 import { DefaultStreamChatGenerics } from 'stream-chat-react';
 import { v4 as uuid } from 'uuid';
 
+// Type for the data stored inside Stream channels
+interface StreamChannelData {
+  server?: string;
+  category?: string;
+  image?: string;
+  [key: string]: any; // other properties
+}
+
 type DiscordState = {
   server?: DiscordServer;
   callId: string | undefined;
@@ -47,11 +55,7 @@ const initialValue: DiscordState = {
 
 const DiscordContext = createContext<DiscordState>(initialValue);
 
-export const DiscordContextProvider: any = ({
-  children,
-}: {
-  children: React.ReactNode;
-}) => {
+export const DiscordContextProvider: any = ({ children }: { children: React.ReactNode }) => {
   const [myState, setMyState] = useState<DiscordState>(initialValue);
 
   const changeServer = useCallback(
@@ -64,23 +68,21 @@ export const DiscordContextProvider: any = ({
         filters.member_count = 2;
       }
 
-      console.log(
-        '[DiscordContext - loadServerList] Querying channels for ',
-        client.userID
-      );
+      console.log('[DiscordContext - loadServerList] Querying channels for ', client.userID);
       const channels = await client.queryChannels(filters);
-      const channelsByCategories = new Map<
-        string,
-        Array<Channel<DefaultStreamChatGenerics>>
-      >();
+      const channelsByCategories = new Map<string, Array<Channel<DefaultStreamChatGenerics>>>();
+
       if (server) {
+        // Get unique categories for the server
         const categories = new Set(
           channels
             .filter((channel) => {
-              return channel.data?.data?.server === server.name;
+              const data = channel.data?.data as StreamChannelData;
+              return data.server === server.name;
             })
             .map((channel) => {
-              return channel.data?.data?.category;
+              const data = channel.data?.data as StreamChannelData;
+              return data.category;
             })
         );
 
@@ -88,51 +90,39 @@ export const DiscordContextProvider: any = ({
           channelsByCategories.set(
             category,
             channels.filter((channel) => {
-              return (
-                channel.data?.data?.server === server.name &&
-                channel.data?.data?.category === category
-              );
+              const data = channel.data?.data as StreamChannelData;
+              return data.server === server.name && data.category === category;
             })
           );
         }
       } else {
         channelsByCategories.set('Direct Messages', channels);
       }
-      setMyState((myState) => {
-        return { ...myState, server, channelsByCategories };
+
+      setMyState((prev) => {
+        return { ...prev, server, channelsByCategories };
       });
     },
     [setMyState]
   );
 
   const createCall = useCallback(
-    async (
-      client: StreamVideoClient,
-      server: DiscordServer,
-      channelName: string,
-      userIds: string[]
-    ) => {
+    async (client: StreamVideoClient, server: DiscordServer, channelName: string, userIds: string[]) => {
       const callId = uuid();
       const audioCall = client.call('default', callId);
-      const audioChannelMembers: MemberRequest[] = userIds.map((userId) => {
-        return {
-          user_id: userId,
-        };
-      });
+      const audioChannelMembers: MemberRequest[] = userIds.map((userId) => ({ user_id: userId }));
+
       try {
         const createdAudioCall = await audioCall.create({
           data: {
             custom: {
-              // serverId: server?.id,
               serverName: server?.name,
               callName: channelName,
             },
             members: audioChannelMembers,
           },
         });
-        console.log(
-          `[DiscordContext] Created Call with id: ${createdAudioCall.call.id}`
-        );
+        console.log(`[DiscordContext] Created Call with id: ${createdAudioCall.call.id}`);
       } catch (err) {
         console.log(err);
       }
@@ -161,14 +151,11 @@ export const DiscordContextProvider: any = ({
       try {
         const response = await messagingChannel.create();
         console.log('[DiscordContext - createServer] Response: ', response);
+
         if (myState.server) {
-          await createCall(
-            videoClient,
-            myState.server,
-            'General Voice Channel',
-            userIds
-          );
+          await createCall(videoClient, myState.server, 'General Voice Channel', userIds);
         }
+
         changeServer({ name, image: imageUrl }, client);
       } catch (err) {
         console.error(err);
@@ -178,23 +165,18 @@ export const DiscordContextProvider: any = ({
   );
 
   const createChannel = useCallback(
-    async (
-      client: StreamChat,
-      name: string,
-      category: string,
-      userIds: string[]
-    ) => {
+    async (client: StreamChat, name: string, category: string, userIds: string[]) => {
       if (client.userID) {
         const channel = client.channel('messaging', {
-          name: name,
+          name,
           members: userIds,
           data: {
             server: myState.server?.name,
-            category: category,
+            category,
           },
         });
         try {
-          const response = await channel.create();
+          await channel.create();
         } catch (err) {
           console.log(err);
         }
@@ -205,9 +187,7 @@ export const DiscordContextProvider: any = ({
 
   const setCall = useCallback(
     (callId: string | undefined) => {
-      setMyState((myState) => {
-        return { ...myState, callId };
-      });
+      setMyState((prev) => ({ ...prev, callId }));
     },
     [setMyState]
   );
@@ -216,16 +196,14 @@ export const DiscordContextProvider: any = ({
     server: myState.server,
     callId: myState.callId,
     channelsByCategories: myState.channelsByCategories,
-    changeServer: changeServer,
-    createServer: createServer,
-    createChannel: createChannel,
-    createCall: createCall,
-    setCall: setCall,
+    changeServer,
+    createServer,
+    createChannel,
+    createCall,
+    setCall,
   };
 
-  return (
-    <DiscordContext.Provider value={store}>{children}</DiscordContext.Provider>
-  );
+  return <DiscordContext.Provider value={store}>{children}</DiscordContext.Provider>;
 };
 
 export const useDiscordContext = () => useContext(DiscordContext);
