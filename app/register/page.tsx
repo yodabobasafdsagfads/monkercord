@@ -1,7 +1,11 @@
+'use client'; // 👈 Add this line at the very top
+
 import { useEffect } from 'react';
 
 export default function Home() {
-  useEffect(() => {}, []);
+  useEffect(() => {
+    console.log('Register page mounted');
+  }, []);
 
   return (
     <div>
