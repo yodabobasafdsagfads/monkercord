@@ -84,6 +84,7 @@ export const DiscordContextProvider: any = ({ children }: { children: React.Reac
               const data = channel.data?.data as StreamChannelData;
               return data.category;
             })
+            .filter((category): category is string => category !== undefined) // ✅ remove undefined
         );
 
         for (const category of Array.from(categories)) {
